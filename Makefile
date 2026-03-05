@@ -1,13 +1,16 @@
 CC = gcc
-CFLAGS = -g -Wall -Werror -std=c99 $(shell pkg-config --cflags sdl2 SDL2_image) 
-LDFLAGS = $(shell pkg-config --libs sdl2 SDL2_image) 
+CFLAGS = -g -Wall -Werror -std=c99 $(shell pkg-config --cflags sdl2 SDL2_image SDL2_ttf)
+LDFLAGS = $(shell pkg-config --libs sdl2 SDL2_image SDL2_ttf)
+
+SRC_DIR = src
+SRCS = $(wildcard $(SRC_DIR)/*.c)
 
 all: pacman
 
-pacman: pacman.c
-	$(CC) $(CFLAGS) pacman.c -o pacman $(LDFLAGS)
+pacman: $(SRCS)
+	$(CC) $(CFLAGS) $(SRCS) -o pacman $(LDFLAGS)
 
-clean: 
+clean:
 	rm -f pacman *.o
 
-.PHONY: all clean install check 
+.PHONY: all clean
