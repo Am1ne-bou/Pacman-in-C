@@ -13,7 +13,9 @@ struct Ghost
     SDL_Texture* tex_left;
     SDL_Texture* tex_right;
     SDL_Texture** current_tex;
-    int speed;
+    float speed;
+    float acc_x;
+    float acc_y;
     int exists;      // 1 = alive, 0 = eaten (returning as eyes)
     int chase;
     int returning;   // 1 = ghost was eaten, travelling as eyes back to spawn

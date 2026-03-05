@@ -16,7 +16,8 @@ bool can_move(int tileX, int tileY, int direction, enum tile_type_e** map, int h
 void set_entity_texture(SDL_Texture** current, int direction,
                         SDL_Texture* up, SDL_Texture* down,
                         SDL_Texture* left, SDL_Texture* right);
-void move_entity(SDL_Rect* entity, int* move_dir, int* requested_dir, int* speed,
+void move_entity(SDL_Rect* entity, int* move_dir, int* requested_dir, float* speed,
+                float* acc_x, float* acc_y,
                 enum tile_type_e** map, int height, int width,
                 SDL_Texture** current_texture,
                 SDL_Texture* tex_up, SDL_Texture* tex_down,

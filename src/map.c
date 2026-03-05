@@ -19,6 +19,7 @@ bool get_map_size(const char* filename, int* height, int* width)
     while (fgets(line, sizeof(line), file)) {
         (*height)++;
         int len = strlen(line)-1; // -1 to remove the \n
+       
             *width = len;
         
     }
@@ -45,6 +46,8 @@ bool allocate_map(enum tile_type_e*** map, int height, int width)
             for(int j = 0; j < i; j++) {
                 free((*map)[j]);
             }
+            free(*map);
+            *map = NULL;
             return false;
         }
     }
@@ -105,6 +108,9 @@ bool load_map_from_file(const char* filename, enum tile_type_e** map,  int* heig
         }
         y++;
     }
+    
+
+    
     fclose(file);
 
     bool pacman_found = false;
@@ -129,6 +135,7 @@ void init_map(enum tile_type_e** map, int* height, int* width)
 {
     *width = N_X_TILES;
     *height = N_Y_TILES;
+
 
      /* The map.
      * Not using WALL, PATH, ... to make it shorter */

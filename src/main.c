@@ -60,8 +60,9 @@ int main(int argc, char* argv[])
     int score = 0;
     int cycle_pacgomme = 0;
     Uint32 vulnerable_start_time = 0;
-    int speed_pacman = 1;
-#define SPEED_GHOST 1
+    float speed_pacman = 1.0f;
+    float pacman_acc_x = 0.0f, pacman_acc_y = 0.0f;
+#define SPEED_GHOST 1.0f
     int vulnerable = 0;
     // 1 = playing, 0 = game over (lost), 2 = win
     int game_on = 1;
@@ -212,7 +213,7 @@ int main(int argc, char* argv[])
         .tex_up = ghost_texture_pink_up, .tex_down = ghost_texture_pink_down,
         .tex_left = ghost_texture_pink_left, .tex_right = ghost_texture_pink_right,
         .current_tex = &current_pink_ghost_texture,
-        .speed = SPEED_GHOST, .exists = 1, .chase = 2,
+        .speed = SPEED_GHOST, .acc_x = 0.0f, .acc_y = 0.0f, .exists = 1, .chase = 2,
         .returning = 0, .spawn_x = ghost_house_x, .spawn_y = ghost_house_y,
         .tex_eyes = ghost_texture_eyes,
     };
@@ -222,7 +223,7 @@ int main(int argc, char* argv[])
         .tex_up = ghost_texture_red_up, .tex_down = ghost_texture_red_down,
         .tex_left = ghost_texture_red_left, .tex_right = ghost_texture_red_right,
         .current_tex = &current_red_ghost_texture,
-        .speed = SPEED_GHOST, .exists = 1, .chase = 1,
+        .speed = SPEED_GHOST, .acc_x = 0.0f, .acc_y = 0.0f, .exists = 1, .chase = 1,
         .returning = 0, .spawn_x = ghost_house_x, .spawn_y = ghost_house_y,
         .tex_eyes = ghost_texture_eyes,
     };
@@ -232,7 +233,7 @@ int main(int argc, char* argv[])
         .tex_up = ghost_texture_blue_up, .tex_down = ghost_texture_blue_down,
         .tex_left = ghost_texture_blue_left, .tex_right = ghost_texture_blue_right,
         .current_tex = &current_blue_ghost_texture,
-        .speed = SPEED_GHOST, .exists = 1, .chase = 0,
+        .speed = SPEED_GHOST, .acc_x = 0.0f, .acc_y = 0.0f, .exists = 1, .chase = 0,
         .returning = 0, .spawn_x = ghost_house_x, .spawn_y = ghost_house_y,
         .tex_eyes = ghost_texture_eyes,
     };
@@ -242,7 +243,7 @@ int main(int argc, char* argv[])
         .tex_up = ghost_texture_orange_up, .tex_down = ghost_texture_orange_down,
         .tex_left = ghost_texture_orange_left, .tex_right = ghost_texture_orange_right,
         .current_tex = &current_orange_ghost_texture,
-        .speed = SPEED_GHOST, .exists = 1, .chase = 0,
+        .speed = SPEED_GHOST, .acc_x = 0.0f, .acc_y = 0.0f, .exists = 1, .chase = 0,
         .returning = 0, .spawn_x = ghost_house_x, .spawn_y = ghost_house_y,
         .tex_eyes = ghost_texture_eyes,
     };
@@ -301,6 +302,19 @@ int main(int argc, char* argv[])
 
     SDL_SetRenderTarget(renderer, NULL);
 
+    // Cached end-screen textures (rebuilt once when game ends)
+    SDL_Texture* cached_title_tex   = NULL;
+    SDL_Rect     cached_title_rect  = {0};
+    SDL_Texture* cached_fscore_tex  = NULL;
+    SDL_Rect     cached_fscore_rect = {0};
+    int          cached_game_on_val = 0;
+    int          cached_score_val   = -1;
+
+    // Cached score HUD texture (rebuilt only when score changes)
+    SDL_Texture* cached_score_hud_tex  = NULL;
+    SDL_Rect     cached_score_hud_rect = {0};
+    int          cached_hud_score_val  = -1;
+
     while (is_running)
     {
         SDL_Event event;
@@ -322,15 +336,16 @@ int main(int argc, char* argv[])
                     switch (event.key.keysym.sym)
                     {
                         case SDLK_q:     is_running = 0; break;
-                        case SDLK_UP:    requested_direction = event.key.keysym.sym; break;
-                        case SDLK_DOWN:  requested_direction = event.key.keysym.sym; break;
-                        case SDLK_LEFT:  requested_direction = event.key.keysym.sym; break;
-                        case SDLK_RIGHT: requested_direction = event.key.keysym.sym; break;
+                        case SDLK_UP:    case SDLK_w: requested_direction = SDLK_UP;    break;
+                        case SDLK_DOWN:  case SDLK_s: requested_direction = SDLK_DOWN;  break;
+                        case SDLK_LEFT:  case SDLK_a: requested_direction = SDLK_LEFT;  break;
+                        case SDLK_RIGHT: case SDLK_d: requested_direction = SDLK_RIGHT; break;
                     }
                     break;
             }
 
             move_entity(&pacman_position, &move_direction, &requested_direction, &speed_pacman,
+                &pacman_acc_x, &pacman_acc_y,
                 map, map_height, map_width, &current_pacman_texture,
                 pacman_texture_up, pacman_texture_down,
                 pacman_texture_left, pacman_texture_right);
@@ -349,9 +364,22 @@ int main(int argc, char* argv[])
                 Uint32 elapsed = SDL_GetTicks() - vulnerable_start_time;
                 Uint32 remaining = (elapsed < VULNERABLE_TIME) ? (VULNERABLE_TIME - elapsed) : 0;
                 if (remaining < FLICKER_WARNING_MS) {
-                    // Toggle every FLICKER_INTERVAL_MS ms
                     flicker = (SDL_GetTicks() / FLICKER_INTERVAL_MS) % 2;
                 }
+            }
+
+            // Dynamic ghost speed based on % of gommes eaten (float, smooth steps):
+            // Vulnerable -> 0.6 (slow)
+            float ghost_normal_speed;
+            float eaten_ratio = (total_gommes > 0) ? ((float)score / total_gommes) : 0.0f;
+            if      (eaten_ratio < 0.50f) ghost_normal_speed = 1.0f;
+            else if (eaten_ratio < 0.65f) ghost_normal_speed = 1.1f;
+            else if (eaten_ratio < 0.80f) ghost_normal_speed = 1.2f;
+            else                          ghost_normal_speed = 1.4f;
+
+            for (int i = 0; i < 4; i++) {
+                if (!ghosts[i].returning)
+                    ghosts[i].speed = (vulnerable == 1) ? 0.6f : ghost_normal_speed;
             }
 
             // Update ghosts
@@ -394,16 +422,20 @@ int main(int argc, char* argv[])
                 }
             }
 
-            // Draw score
-            char score_text[32];
-            snprintf(score_text, sizeof(score_text), "SCORE: %d", score);
-            SDL_Color white = {255, 255, 255, 255};
-            SDL_Surface* score_surface = TTF_RenderText_Solid(font, score_text, white);
-            SDL_Texture* score_texture = SDL_CreateTextureFromSurface(renderer, score_surface);
-            SDL_Rect score_rect = {10, 5, score_surface->w, score_surface->h};
-            SDL_FreeSurface(score_surface);
-            SDL_RenderCopy(renderer, score_texture, NULL, &score_rect);
-            SDL_DestroyTexture(score_texture);
+            // Draw score HUD (cached, rebuilt only when score changes)
+            int remaining = total_gommes - score;
+            if (score != cached_hud_score_val) {
+                if (cached_score_hud_tex) SDL_DestroyTexture(cached_score_hud_tex);
+                char score_text[64];
+                snprintf(score_text, sizeof(score_text), "SCORE: %d  |  BALLS: %d", score, remaining);
+                SDL_Color white = {255, 255, 255, 255};
+                SDL_Surface* score_surface = TTF_RenderText_Solid(font, score_text, white);
+                cached_score_hud_tex = SDL_CreateTextureFromSurface(renderer, score_surface);
+                cached_score_hud_rect = (SDL_Rect){10, 5, score_surface->w, score_surface->h};
+                SDL_FreeSurface(score_surface);
+                cached_hud_score_val = score;
+            }
+            SDL_RenderCopy(renderer, cached_score_hud_tex, NULL, &cached_score_hud_rect);
 
             SDL_RenderPresent(renderer);
             SDL_Delay(2);
@@ -424,34 +456,41 @@ int main(int argc, char* argv[])
             SDL_Rect overlay = {0, 0, window_rect.w, window_rect.h};
             SDL_RenderFillRect(renderer, &overlay);
 
-            SDL_Color title_color = (game_on == 2)
-                ? (SDL_Color){50, 220, 50, 255}
-                : (SDL_Color){220, 50, 50, 255};
-            const char* title_text = (game_on == 2) ? "YOU WIN!" : "GAME OVER";
-            SDL_Surface* title_surface = TTF_RenderText_Solid(font, title_text, title_color);
-            SDL_Texture* title_texture = SDL_CreateTextureFromSurface(renderer, title_surface);
-            SDL_Rect title_rect = {
-                (window_rect.w - title_surface->w) / 2,
-                window_rect.h / 2 - title_surface->h - 10,
-                title_surface->w, title_surface->h
-            };
-            SDL_FreeSurface(title_surface);
-            SDL_RenderCopy(renderer, title_texture, NULL, &title_rect);
-            SDL_DestroyTexture(title_texture);
+            // Build end-screen textures once (cached)
+            if (cached_game_on_val != game_on || cached_score_val != score) {
+                if (cached_title_tex)  SDL_DestroyTexture(cached_title_tex);
+                if (cached_fscore_tex) SDL_DestroyTexture(cached_fscore_tex);
 
-            char final_score[32];
-            snprintf(final_score, sizeof(final_score), "SCORE: %d", score);
-            SDL_Color white = {255, 255, 255, 255};
-            SDL_Surface* fscore_surface = TTF_RenderText_Solid(font, final_score, white);
-            SDL_Texture* fscore_texture = SDL_CreateTextureFromSurface(renderer, fscore_surface);
-            SDL_Rect fscore_rect = {
-                (window_rect.w - fscore_surface->w) / 2,
-                window_rect.h / 2 + 10,
-                fscore_surface->w, fscore_surface->h
-            };
-            SDL_FreeSurface(fscore_surface);
-            SDL_RenderCopy(renderer, fscore_texture, NULL, &fscore_rect);
-            SDL_DestroyTexture(fscore_texture);
+                SDL_Color title_color = (game_on == 2)
+                    ? (SDL_Color){50, 220, 50, 255}
+                    : (SDL_Color){220, 50, 50, 255};
+                const char* title_text = (game_on == 2) ? "YOU WIN!" : "GAME OVER";
+                SDL_Surface* title_surface = TTF_RenderText_Solid(font, title_text, title_color);
+                cached_title_tex  = SDL_CreateTextureFromSurface(renderer, title_surface);
+                cached_title_rect = (SDL_Rect){
+                    (window_rect.w - title_surface->w) / 2,
+                    window_rect.h / 2 - title_surface->h - 10,
+                    title_surface->w, title_surface->h
+                };
+                SDL_FreeSurface(title_surface);
+
+                char final_score[32];
+                snprintf(final_score, sizeof(final_score), "SCORE: %d", score);
+                SDL_Color white = {255, 255, 255, 255};
+                SDL_Surface* fscore_surface = TTF_RenderText_Solid(font, final_score, white);
+                cached_fscore_tex  = SDL_CreateTextureFromSurface(renderer, fscore_surface);
+                cached_fscore_rect = (SDL_Rect){
+                    (window_rect.w - fscore_surface->w) / 2,
+                    window_rect.h / 2 + 10,
+                    fscore_surface->w, fscore_surface->h
+                };
+                SDL_FreeSurface(fscore_surface);
+
+                cached_game_on_val = game_on;
+                cached_score_val   = score;
+            }
+            SDL_RenderCopy(renderer, cached_title_tex,  NULL, &cached_title_rect);
+            SDL_RenderCopy(renderer, cached_fscore_tex, NULL, &cached_fscore_rect);
 
             SDL_RenderPresent(renderer);
             SDL_Delay(2);
@@ -485,11 +524,15 @@ int main(int argc, char* argv[])
     SDL_DestroyTexture(ghost_texture_flicker);
     SDL_DestroyTexture(ghost_texture_eyes);
     SDL_DestroyTexture(map_texture);
+    if (cached_title_tex)      SDL_DestroyTexture(cached_title_tex);
+    if (cached_fscore_tex)     SDL_DestroyTexture(cached_fscore_tex);
+    if (cached_score_hud_tex)  SDL_DestroyTexture(cached_score_hud_tex);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(screen);
 
     TTF_CloseFont(font);
     TTF_Quit();
+    IMG_Quit();
     SDL_Quit();
 
     return EXIT_SUCCESS;

@@ -257,8 +257,9 @@ void updating_ghost(struct Ghost* ghost, SDL_Texture* vulnerable_tex, SDL_Textur
         ghost->direction = get_direction_toward(&ghost->position, ghost->spawn_x, ghost->spawn_y,
             ghost->direction, map, height, width);
 
-        int eyes_speed = ghost->speed * 2; // eyes move faster
+        float eyes_speed = ghost->speed * 2.0f; // eyes move faster
         move_entity(&ghost->position, &ghost->direction, &ghost->direction, &eyes_speed,
+            &ghost->acc_x, &ghost->acc_y,
             map, height, width, ghost->current_tex,
             ghost->tex_eyes, ghost->tex_eyes, ghost->tex_eyes, ghost->tex_eyes);
 
@@ -300,6 +301,7 @@ void updating_ghost(struct Ghost* ghost, SDL_Texture* vulnerable_tex, SDL_Textur
     }
 
     move_entity(&ghost->position, &ghost->direction, &ghost->direction, &ghost->speed,
+        &ghost->acc_x, &ghost->acc_y,
         map, height, width, ghost->current_tex,
         display_tex_up, display_tex_down, display_tex_left, display_tex_right);
 
